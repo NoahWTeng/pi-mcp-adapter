@@ -1383,12 +1383,13 @@ describe("mcpAdapter session lifecycle", () => {
       for (const allowed of ["review", "create"]) {
         const config = { mcpServers: { shared: {
           url: "https://shared.example/mcp", lifecycle: "eager" as const,
-          directTools: true as const, includeTools: ["read", allowed],
+          directTools: true as const, includeTools: ["read", "read_record", allowed],
         } } };
         const connection = {
           status: "connected", definition: config.mcpServers.shared,
           tools: ["read", "review", "create"].map(name => ({ name, inputSchema: { type: "object" } })),
-          resources: [], toolListHints: { ttlMs },
+          resources: [{ name: "record", uri: `file:///${allowed}` }],
+          resourceDiscoveryFailed: false, toolListHints: { ttlMs },
         };
         const state = createState();
         state.config = config;
@@ -1407,7 +1408,7 @@ describe("mcpAdapter session lifecycle", () => {
       }
       const assertCatalogue = (session: typeof sessions[number]) => {
         expect(session.active().filter(name => name.startsWith("shared_")).sort())
-          .toEqual(["shared_read", `shared_${session.allowed}`].sort());
+          .toEqual(["shared_read", "shared_read_record", `shared_${session.allowed}`].sort());
       };
       const diskBytes = readFileSync(cache.getMetadataCachePath(), "utf8");
       for (const session of sessions) {
@@ -1415,6 +1416,14 @@ describe("mcpAdapter session lifecycle", () => {
         assertCatalogue(session);
       }
       expect(readFileSync(cache.getMetadataCachePath(), "utf8")).toBe(diskBytes);
+      const reviewer = sessions[0];
+      reviewer.connection.resources = [];
+      reviewer.connection.resourceDiscoveryFailed = true;
+      core.updateMetadataCache(reviewer.state as any, "shared");
+      await reviewer.state.onToolMetadataUpdated!("shared", "resource-discovery-failed");
+      assertCatalogue(reviewer);
+      expect(reviewer.state.sessionMetadata?.get("shared")?.resources)
+        .toEqual([{ name: "record", uri: "file:///review" }]);
       rmSync(cache.getMetadataCachePath());
       for (const session of sessions) {
         session.state.manager.getAllConnections = () => new Map();
@@ -1436,8 +1445,8 @@ describe("mcpAdapter session lifecycle", () => {
         await writer.state.onToolMetadataUpdated!("shared", "config-restored");
         assertCatalogue(writer);
       }
-      const reviewer = sessions[0];
       reviewer.connection.tools = [];
+      reviewer.connection.resourceDiscoveryFailed = false;
       core.updateMetadataCache(reviewer.state as any, "shared");
       await reviewer.state.onToolMetadataUpdated!("shared", "tools-list-changed");
       expect(reviewer.active().filter(name => name.startsWith("shared_"))).toEqual([]);

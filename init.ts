@@ -607,13 +607,13 @@ export function updateMetadataCache(
     ? existingEntry?.configHash === configHash ? existingEntry.prompts : undefined
     : serializePrompts(connection.prompts ?? []);
 
-  if (
-    definition.exposeResources !== false &&
-    connection.resourceDiscoveryFailed === true &&
-    existingEntry?.resources?.length &&
-    isServerCacheValid(existingEntry, definition)
-  ) {
-    resources = existingEntry.resources;
+  if (definition.exposeResources !== false && connection.resourceDiscoveryFailed === true) {
+    const sessionEntry = state.sessionMetadata?.get(serverName);
+    if (sessionEntry?.configHash === configHash) {
+      resources = sessionEntry.resources ?? [];
+    } else if (existingEntry?.resources?.length && isServerCacheValid(existingEntry, definition)) {
+      resources = existingEntry.resources;
+    }
   }
 
   const entry: ServerCacheEntry = {
