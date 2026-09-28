@@ -580,6 +580,7 @@ export function updateMetadataCache(
   if (!definition || isServerDisabled(definition)) return;
 
   const configHash = computeServerHash(definition);
+  if (connection.definition && computeServerHash(connection.definition) !== configHash) return;
   const existing = loadMetadataCache();
   const existingEntry = existing?.servers?.[serverName];
 
@@ -609,6 +610,7 @@ export function updateMetadataCache(
     cachedAt: Date.now(),
   };
 
+  (state.sessionMetadata ??= new Map()).set(serverName, entry);
   saveMetadataCache({ version: 1, servers: { [serverName]: entry } });
 }
 
